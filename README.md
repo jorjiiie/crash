@@ -1,0 +1,2 @@
+# crash
+crazy fast hash
