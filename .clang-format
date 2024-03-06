@@ -1,0 +1,4 @@
+Language: Cpp
+Standard: Cpp20
+BreakBeforeBraces:
+  - Allman
