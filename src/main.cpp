@@ -1,9 +1,11 @@
 #include "crash.hpp"
+#include "crash_multi.hpp"
 
 #include <chrono>
 #include <cstring>
 #include <iostream>
 #include <random>
+#include <thread>
 
 #include <set>
 using namespace std;
@@ -70,38 +72,75 @@ string generate(int max_length) {
 }
 
 int main() {
-  hashtable<string_wrapper<_hash>, int> x(1 << 20);
   using str = string_wrapper<_hash>;
   vector<str> keys;
-#define NUM_KEYS 10000000
+#define NUM_KEYS 10000
   cerr << " wtf\n";
 
   for (int i = 0; i < NUM_KEYS; i++) {
     keys.push_back(str(generate(30)));
   }
   cerr << "cool\n";
-#define NUM_OPS 100000000
+#define NUM_OPS 10000000
   typedef std::chrono::high_resolution_clock Clock;
   auto t0 = Clock::now();
-
-  set<string> zz;
-  for (int i = 0; i < NUM_OPS; i++) {
-    // get an op
-    double op = (rand() * 1.0 / RAND_MAX);
-    int r = rand() % NUM_KEYS;
-    if (op < 0.8) {
-      x.get(keys[r]);
-    } else if (op < 0.95) {
-      // zz.insert(keys[r].s);
-      x.put(keys[r], 0);
-    } else {
-      x.erase(keys[r]);
-      // zz.erase(keys[r].s);
+  {
+    pcg32 rng(0, 0);
+    hashtable<string_wrapper<_hash>, int> x(1 << 24);
+    for (int i = 0; i < NUM_OPS; i++) {
+      // get an op
+      double op = (rng.get() * 0.5 / RAND_MAX);
+      int r = rand() % NUM_KEYS;
+      if (op < 0.8) {
+        x.get(keys[r]);
+      } else if (op < 0.95) {
+        // zz.insert(keys[r].s);
+        x.put(keys[r], 0);
+      } else {
+        x.erase(keys[r]);
+        // zz.erase(keys[r].s);
+      }
     }
   }
   auto t1 = Clock::now();
   std::chrono::duration<float> t = t1 - t0;
+  cout << t.count() << "s\n";
 
+  t0 = Clock::now();
+  {
+    concurrent_hashtable<string_wrapper<_hash>, int> x(1 << 24);
+
+    vector<thread> threads;
+#define NUM_THREADS 6
+    for (int i = 0; i < NUM_THREADS; i++) {
+      threads.push_back(thread([&x, i, &keys]() {
+        thread_local pcg32 rng(i, i);
+        for (int j = 0; j < 5; j++)
+          rng.get();
+
+        for (int j = 0; j < NUM_OPS / NUM_THREADS; j++) {
+          // get an op
+          double op = (rng.get() * 0.5 / RAND_MAX);
+          int r = rng.get() % NUM_KEYS;
+
+          if (op < 0.8) {
+            x.get(keys[r]);
+          } else if (op < 0.95) {
+            // zz.insert(keys[r].s);
+            x.put(keys[r], 0);
+          } else {
+            x.erase(keys[r]);
+            // zz.erase(keys[r].s);
+          }
+        }
+      }));
+    }
+    for (auto &z : threads) {
+      z.join();
+    }
+  }
+  t1 = Clock::now();
+  t = t1 - t0;
   cout << t.count() << "s\n";
 
   // x.dump();

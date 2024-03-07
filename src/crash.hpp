@@ -11,13 +11,9 @@
 #include <set>
 #include <string>
 
-namespace crash {
+#include "common.hpp"
 
-template <class Key>
-concept Hashable = requires(const Key &k) {
-  { k.hash() } -> std::convertible_to<std::size_t>;
-  { k <=> k } -> std::convertible_to<int>;
-};
+namespace crash {
 
 template <class Key, class Value>
   requires Hashable<Key>
