@@ -57,11 +57,11 @@ ostream &operator<<(ostream &os, const string_wrapper<_hash> &s) {
 }
 
 string generate(int max_length) {
-  string possible_characters =
+  static string possible_characters =
       "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-  random_device rd;
-  mt19937 engine(rd());
-  uniform_int_distribution<> dist(0, possible_characters.size() - 1);
+  static random_device rd;
+  static mt19937 engine(rd());
+  static uniform_int_distribution<> dist(0, possible_characters.size() - 1);
   string ret = "";
   for (int i = 0; i < max_length; i++) {
     int random_index =
@@ -74,41 +74,48 @@ string generate(int max_length) {
 int main() {
   using str = string_wrapper<_hash>;
   vector<str> keys;
-#define NUM_KEYS 10000
+#define NUM_KEYS 20000000
+#define NUM_OPS 15000000
+
   cerr << " wtf\n";
 
   for (int i = 0; i < NUM_KEYS; i++) {
     keys.push_back(str(generate(30)));
   }
   cerr << "cool\n";
-#define NUM_OPS 10000000
   typedef std::chrono::high_resolution_clock Clock;
-  auto t0 = Clock::now();
-  {
-    pcg32 rng(0, 0);
-    hashtable<string_wrapper<_hash>, int> x(1 << 24);
+
+  for (int i = 0; i < 50; i++) {
+    auto t0 = Clock::now();
+
+    pcg32 rng(i, i);
+    hashtable<string_wrapper<_hash>, int> x(1 << 25);
     for (int i = 0; i < NUM_OPS; i++) {
       // get an op
-      double op = (rng.get() * 0.5 / RAND_MAX);
-      int r = rand() % NUM_KEYS;
-      if (op < 0.8) {
-        x.get(keys[r]);
-      } else if (op < 0.95) {
-        // zz.insert(keys[r].s);
-        x.put(keys[r], 0);
-      } else {
-        x.erase(keys[r]);
-        // zz.erase(keys[r].s);
+      x.put(keys[i], rng.get());
+    }
+    auto t1 = Clock::now();
+    std::chrono::duration<float> t = t1 - t0;
+    cout << "time to insert 15m: " << t.count() << "s\n";
+
+    t0 = Clock::now();
+    int cnt = 0;
+    for (int i = 0; i < NUM_OPS; i++) {
+      int r = rng.get() % NUM_KEYS;
+      auto z = x.get(keys[r]);
+      if (z) {
+        cnt++;
       }
     }
+    t1 = Clock::now();
+    t = t1 - t0;
+    cout << t.count() << "s please " << cnt << "\n";
   }
-  auto t1 = Clock::now();
-  std::chrono::duration<float> t = t1 - t0;
-  cout << t.count() << "s\n";
 
-  t0 = Clock::now();
+  exit(0);
+  auto t0 = Clock::now();
   {
-    concurrent_hashtable<string_wrapper<_hash>, int> x(1 << 24);
+    concurrent_hashtable<string_wrapper<_hash>, int> x(1 << 25);
 
     vector<thread> threads;
 #define NUM_THREADS 6
@@ -130,11 +137,45 @@ int main() {
             x.put(keys[r], 0);
           } else {
             x.erase(keys[r]);
-            // zz.erase(keys[r].s);
+            // zz.erase(keys[r].s);00000
           }
         }
       }));
     }
+    for (auto &z : threads) {
+      z.join();
+    }
+  }
+  auto t1 = Clock::now();
+  std::chrono::duration<float> t = t1 - t0;
+  cout << t.count() << "s\n";
+
+  t0 = Clock::now();
+  {
+    concurrent_hashtable<string_wrapper<_hash>, int> x(1 << 25);
+
+    vector<thread> threads;
+    threads.push_back(thread([&x, &keys]() {
+      pcg32 rng(0, 0);
+      for (int j = 0; j < 5; j++)
+        rng.get();
+
+      for (int j = 0; j < NUM_OPS; j++) {
+        // get an op
+        double op = (rng.get() * 0.5 / RAND_MAX);
+        int r = rng.get() % NUM_KEYS;
+
+        if (op < 0.8) {
+          x.get(keys[r]);
+        } else if (op < 0.95) {
+          // zz.insert(keys[r].s);
+          x.put(keys[r], 0);
+        } else {
+          x.erase(keys[r]);
+          // zz.erase(keys[r].s);
+        }
+      }
+    }));
     for (auto &z : threads) {
       z.join();
     }

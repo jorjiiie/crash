@@ -49,27 +49,28 @@ public:
 
   void put(const K &key, V v) {
     auto &entry = get_entry(key);
-    auto s = entry.s.load();
-    if (s.occupied) {
-      auto n_s = s;
-      s.value = v;
-      if (entry.s.compare_exchange_strong(s, n_s)) {
-        return;
+    while (true) {
+      auto s = entry.s.load();
+      if (s.occupied) {
+        auto n_s = s;
+        s.value = v;
+        if (entry.s.compare_exchange_strong(s, n_s)) {
+          return;
+        }
+        // dont know what to do lol
+        continue;
       }
-      // dont know what to do lol
-      put(key, v);
-      return;
-    }
 
-    // insert
-    num_keys++;
-    effective_keys++;
-    auto n_s = s;
-    n_s.tombstone = false;
-    n_s.occupied = true;
-    n_s.value = v;
-    if (!entry.s.compare_exchange_strong(s, n_s)) {
-      put(key, v);
+      // insert
+      num_keys++;
+      effective_keys++;
+      auto n_s = s;
+      n_s.tombstone = false;
+      n_s.occupied = true;
+      n_s.value = v;
+      if (!entry.s.compare_exchange_strong(s, n_s)) {
+        continue;
+      }
       return;
     }
 
@@ -95,21 +96,21 @@ public:
   bool erase(const K &key) {
 
     auto &entry = get_entry(key);
-    auto s = entry.s.load();
-
-    if (s.occupied) {
-      num_keys--;
-      effective_keys--;
-      auto n_s = s;
-      n_s.tombstone = true;
-      n_s.occupied = false;
-      if (entry.s.compare_exchange_strong(s, n_s)) {
-        return true;
+    while (true) {
+      auto s = entry.s.load();
+      if (s.occupied) {
+        num_keys--;
+        effective_keys--;
+        auto n_s = s;
+        n_s.tombstone = true;
+        n_s.occupied = false;
+        if (entry.s.compare_exchange_strong(s, n_s)) {
+          return true;
+        }
+        continue;
       }
-      return erase(key);
+      return false;
     }
-
-    return false;
   }
   size_t size() const { return num_keys; }
   size_t capacity() const { return current_size; }

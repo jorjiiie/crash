@@ -3,6 +3,7 @@
 #ifndef CRASH_HPP
 #define CRASH_HPP
 
+#include <cstring>
 #include <functional>
 #include <optional>
 #include <vector>
@@ -23,61 +24,59 @@ public:
   using V = Value;
 
   hashtable(size_t size = 16)
-      : table(size), tombstones(size), occupied(size), current_size(size){};
-  ~hashtable(){};
+      : keys(size), values(size), metadata(2 * size, false),
+        current_size(size){};
+  ~hashtable() = default;
 
-  std::optional<const std::reference_wrapper<V>> get(const K &key) {
-    // use quadratic probing
-    size_t h = get_slot(key);
-    // can save a comparison here
-    if (occupied[h] && table[h].first <=> key == 0)
-      return table[h].second;
-    return {};
-  }
   std::optional<const std::reference_wrapper<const V>> get(const K &key) const {
     // use quadratic probing
     size_t h = get_slot(key);
-    // can save a comparison here
-    if (occupied[h] && table[h].first <=> key == 0)
-      return table[h].second;
+    if (metadata[2 * h]) {
+      return values[h];
+    }
     return {};
   }
 
   void put(const K &key, V v) {
-    size_t h = get_slot(key);
-    // std::cerr << "putting " << key << " in " << h << " " << num_keys << "\n";
 
-    if (occupied[h]) {
-      table[h].second = v;
+    size_t h = get_slot(key);
+
+    if (metadata[2 * h]) {
+      values[h] = v;
       return;
     }
+
     // insert
+    keys[h] = key;
+
+    metadata[2 * h] = true;
+    metadata[2 * h + 1] = false;
+
+    values[h] = v;
+
     num_keys++;
     effective_keys++;
-    occupied[h] = true;
-    tombstones[h] = false;
-    table[h] = {key, v};
 
     if (effective_keys * 2 > current_size) {
       hashtable x(current_size * 2);
       int p = 0;
       for (int i = 0; i < current_size; i++) {
         p++;
-        if (occupied[i]) {
-          x.put(table[i].first, table[i].second);
+        if (metadata[2 * i]) {
+          x.put(keys[i], values[i]);
         }
-        x.put(key, v);
       }
-      std::swap(*this, x);
+      *this = std::move(x);
     }
   }
 
   bool erase(const K &key) {
     size_t h = get_slot(key);
-    if (occupied[h] && table[h].first <=> key == 0) {
+    if (metadata[2 * h]) {
       num_keys--;
-      tombstones[h] = true;
-      occupied[h] = false;
+      metadata[2 * h] = false;
+      metadata[2 * h + 1] = true;
+
       return true;
     }
     return false;
@@ -86,40 +85,31 @@ public:
   size_t capacity() const { return current_size; }
 
   void dump() const {
-    std::set<std::string> zz;
-    int cnt = 0;
     for (int i = 0; i < current_size; i++) {
-
-      if (occupied[i]) {
-        cnt++;
-        zz.insert(table[i].first.s);
-        std::cerr << i << ": " << table[i].first << " " << table[i].second
-                  << "\n";
+      if (metadata[2 * i]) {
+        std::cerr << i << ": " << keys[i] << " " << values[i] << "\n";
       }
-    }
-    for (auto s : zz) {
-      std::cerr << s << "\n";
     }
   }
 
 private:
-  [[nodiscard]] inline size_t get_slot(const K &key) const {
-    size_t h = key.hash() % table.size();
+  [[nodiscard]] size_t get_slot(const K &key) const {
+    size_t h = key.hash() & (keys.size() - 1);
     int i = 1;
-    while ((tombstones[h] || occupied[h]) && table[h].first <=> key != 0) {
+    while ((metadata[2 * i] || metadata[2 * i + 1]) && keys[i] <=> key != 0) {
       h += i * (i + 1) / 2;
       i++;
       h &= (current_size - 1);
     }
-    // std::cerr << "I return " << h << " for " << key << "\n";
     return h;
   }
   size_t num_keys = 0;
   size_t effective_keys = 0;
   size_t current_size = 16;
-  std::vector<std::pair<K, V>> table;
-  std::vector<bool> tombstones;
-  std::vector<bool> occupied;
+  std::vector<K> keys;
+  std::vector<Value> values;
+  std::vector<bool>
+      metadata; // meta[2i] = occupied[i], meta[2i+1] = tombstone[i]
 };
 
 } // namespace crash
