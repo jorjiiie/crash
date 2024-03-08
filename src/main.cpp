@@ -11,51 +11,6 @@
 using namespace std;
 using namespace crash;
 
-template <typename hash_fn> struct string_wrapper {
-  string_wrapper() { memset(s, 0, 32); }
-  string_wrapper(const string &x) {
-    memset(s, 0, 32);
-    for (int i = 0; i < x.length(); i++) {
-      s[i] = x[i];
-    }
-    s[x.length()] = 0;
-  }
-  string_wrapper(const char *str) {
-    memset(s, 0, 32);
-    strcpy(s, str);
-  }
-  string_wrapper(const string_wrapper &w) { strcpy(s, w.s); }
-
-  char s[32] = {};
-  int operator<=>(const string_wrapper &o) const {
-    for (int i = 0; i < 31; i++) {
-      if (o.s[i] != s[i])
-        return -1;
-    }
-    return 0;
-  }
-  size_t hash() const { return hash_fn{}(*this); }
-};
-
-struct _hash {
-  size_t operator()(const string_wrapper<_hash> &s) const {
-    unsigned long hash = 5381;
-    int c;
-
-    const char *str = s.s;
-
-    while ((c = *str++))
-      hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-
-    return hash;
-  }
-};
-
-ostream &operator<<(ostream &os, const string_wrapper<_hash> &s) {
-  os << s.s;
-  return os;
-}
-
 string generate(int max_length) {
   static string possible_characters =
       "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";

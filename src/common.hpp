@@ -1,16 +1,21 @@
 #pragma once
 
+#include <concepts>
 #ifndef COMMON_HPP
 #define COMMON_HPP
 
 #include <atomic>
+#include <cstring>
 #include <functional>
+#include <random>
+#include <string>
 
 namespace crash {
 template <class Key>
 concept Hashable = requires(const Key &k) {
   { k.hash() } -> std::convertible_to<std::size_t>;
   { k <=> k } -> std::convertible_to<int>;
+  { k == k } -> std::convertible_to<bool>;
 };
 
 typedef struct {
@@ -51,6 +56,99 @@ public:
     return *this;
   }
 };
+
+template <typename hash_fn> struct string_wrapper {
+  string_wrapper() { std::memset(s, 0, 32); }
+  string_wrapper(const std::string &x) {
+    std::memset(s, 0, 32);
+    for (int i = 0; i < x.length(); i++) {
+      s[i] = x[i];
+    }
+    s[x.length()] = 0;
+  }
+  string_wrapper(const char *str) {
+    std::memset(s, 0, 32);
+    std::strcpy(s, str);
+  }
+  string_wrapper(const string_wrapper &w) { std::strcpy(s, w.s); }
+
+  char s[32] = {};
+  int operator<=>(const string_wrapper &o) const {
+    for (int i = 0; i < 31; i++) {
+      if (o.s[i] != s[i])
+        return -1;
+    }
+    return 0;
+  }
+  template <class T> bool operator==(const string_wrapper<T> &other) const {
+    return (*this) <=> other == 0;
+  }
+  size_t hash() const { return hash_fn{}(*this); }
+};
+
+struct _hash {
+  size_t operator()(const string_wrapper<_hash> &s) const {
+    unsigned long hash = 5381;
+    int c;
+
+    const char *str = s.s;
+
+    while ((c = *str++))
+      hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+    return hash;
+  }
+};
+
+template <typename hash_fn> struct uint64_t_wrapper {
+  uint64_t_wrapper() {}
+  uint64_t_wrapper(uint64_t t) : i(t) {}
+  uint64_t_wrapper(int t) : i(t) {}
+
+  uint64_t i;
+};
+typedef string_wrapper<_hash> String;
+typedef uint64_t_wrapper<decltype([](auto i) { return std::hash(i); })> i64;
+
+std::ostream &operator<<(std::ostream &os, const String &s) {
+  os << s.s;
+  return os;
+}
+std::ostream &operator<<(std::ostream &os, i64 i) {
+  os << i.i;
+  return os;
+}
+struct gen_string {
+  static std::string generate(int max_length) {
+    static std::string possible_characters =
+        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    static std::random_device rd;
+    static std::mt19937 engine(rd());
+    static std::uniform_int_distribution<> dist(0,
+                                                possible_characters.size() - 1);
+    std::string ret = "";
+    for (int i = 0; i < max_length; i++) {
+      int random_index =
+          dist(engine); // get index between 0 and possible_characters.size()-1
+      ret += possible_characters[random_index];
+    }
+    return ret;
+  }
+
+  String get() const { return String(generate(30)); }
+};
+
+struct gen_int {
+  gen_int() : rng(1, 10) {}
+  pcg32 rng;
+  i64 get() { return (uint64_t)rng.get() * rng.get(); }
+};
+struct gen_int_unwrap {
+  gen_int_unwrap() : rng(1, 10) {}
+  pcg32 rng;
+  uint64_t get() { return (uint64_t)rng.get() * rng.get(); }
+};
+
 } // namespace crash
 
 #endif
