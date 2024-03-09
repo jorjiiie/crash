@@ -10,6 +10,7 @@
 
 #include "common.hpp"
 #include "crash_multi.hpp"
+#include "linear.hpp"
 #include "quadratic.hpp"
 
 using namespace std;
@@ -125,6 +126,7 @@ unordered_map<string, uint64_t> bench() {
   }
 
   const int num_bench = 1000000;
+  const int num_erase = 1000;
   {
     auto c = make_clock("get_N_present");
     int idx = 0;
@@ -165,10 +167,29 @@ unordered_map<string, uint64_t> bench() {
         idx = 0;
     }
   }
-  { auto c = make_clock("get_N_missing_random"); }
-  { auto c = make_clock("get_N_mixed_50"); }
+  {
+    auto c = make_clock("get_N_missing_random");
+    for (int i = 0; i < num_bench; i++) {
+      int z = rng.get() % N;
+      auto x = m.get(keys[N + z]);
+      doNotOptimizeAway(*x);
+    }
+  }
+  {
+    auto c = make_clock("get_N_mixed_50");
+    for (int i = 0; i < num_bench; i++) {
+      int z = rng.get() % (2 * N);
+      auto x = m.get(keys[z]);
+      doNotOptimizeAway(*x);
+    }
+  }
+
+  // get erase indices
+
   { auto c = make_clock("erase_N_present"); } // hmm how does this work...
   { auto c = make_clock("erase_N_mixed_50"); }
+
+  // uhhh this may be useless
   { auto c = make_clock("use_N_flushed_cache"); } // mixed workload
   {
     auto c = make_clock("use_N_prefetch");
@@ -197,13 +218,32 @@ void do_bench(string n, ostream &stream) {
 
 int main() {
   const int string_inserts = 10000000;
+  const int int_inserts = 10000000;
   map<string, function<void(string, ostream &)>> benchmarks = {
-      {"Std Unordered",
+      {"Std Unordered String",
        do_bench<Std_Unordered<String, uint64_t>, String, uint64_t, gen_string,
                 gen_int_unwrap, string_inserts>},
-      {"Quadratic Probing",
+      {"Quadratic Probing String",
        do_bench<quadratic<String, uint64_t>, String, uint64_t, gen_string,
                 gen_int_unwrap, string_inserts>},
+      {"Std Unordered Int",
+       do_bench<Std_Unordered<i64, uint64_t>, i64, uint64_t, gen_int,
+                gen_int_unwrap, int_inserts>},
+      {"Quadratic Probing Int",
+       do_bench<quadratic<i64, uint64_t>, i64, uint64_t, gen_int,
+                gen_int_unwrap, int_inserts>},
+      {"Std Unordered Int Std",
+       do_bench<Std_Unordered<i64_std, uint64_t>, i64_std, uint64_t,
+                gen_int_std, gen_int_unwrap, int_inserts>},
+      {"Quadratic Probing Int Std",
+       do_bench<quadratic<i64_std, uint64_t>, i64_std, uint64_t, gen_int_std,
+                gen_int_unwrap, int_inserts>},
+      {"Linear Probing String",
+       do_bench<linear<String, uint64_t>, String, uint64_t, gen_string,
+                gen_int_unwrap, string_inserts>},
+      {"Linear Probing Int", do_bench<linear<i64, uint64_t>, i64, uint64_t,
+                                      gen_int, gen_int_unwrap, int_inserts>},
+
   };
 
   for (const auto &[n, fn] : benchmarks) {

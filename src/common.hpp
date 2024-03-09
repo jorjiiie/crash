@@ -99,16 +99,43 @@ struct _hash {
     return hash;
   }
 };
-
+inline uint64_t squirrel3(uint64_t at) {
+  constexpr uint64_t BIT_NOISE1 = 0x9E3779B185EBCA87ULL;
+  constexpr uint64_t BIT_NOISE2 = 0xC2B2AE3D27D4EB4FULL;
+  constexpr uint64_t BIT_NOISE3 = 0x27D4EB2F165667C5ULL;
+  at *= BIT_NOISE1;
+  at ^= (at >> 8);
+  at += BIT_NOISE2;
+  at ^= (at << 8);
+  at *= BIT_NOISE3;
+  at ^= (at >> 8);
+  return at;
+}
 template <typename hash_fn> struct uint64_t_wrapper {
   uint64_t_wrapper() {}
   uint64_t_wrapper(uint64_t t) : i(t) {}
   uint64_t_wrapper(int t) : i(t) {}
 
+  size_t hash() const { return hash_fn{}(i); }
+  uint64_t operator<=>(const uint64_t_wrapper &o) const { return o.i - i; }
+  bool operator==(const uint64_t_wrapper &o) const { return o.i == i; }
+
   uint64_t i;
 };
+struct ihash {
+  size_t operator()(const uint64_t_wrapper<ihash> &i) const {
+    return std::hash<uint64_t>{}(i.i);
+  }
+};
+struct sqhash {
+  size_t operator()(const uint64_t_wrapper<sqhash> &i) const {
+    return squirrel3(i.i);
+  }
+};
+
 typedef string_wrapper<_hash> String;
-typedef uint64_t_wrapper<decltype([](auto i) { return std::hash(i); })> i64;
+typedef uint64_t_wrapper<ihash> i64_std;
+typedef uint64_t_wrapper<sqhash> i64;
 
 std::ostream &operator<<(std::ostream &os, const String &s) {
   os << s.s;
@@ -142,6 +169,9 @@ struct gen_int {
   gen_int() : rng(1, 10) {}
   pcg32 rng;
   i64 get() { return (uint64_t)rng.get() * rng.get(); }
+};
+struct gen_int_std : public gen_int {
+  i64_std get() { return (uint64_t)rng.get() * rng.get(); }
 };
 struct gen_int_unwrap {
   gen_int_unwrap() : rng(1, 10) {}
