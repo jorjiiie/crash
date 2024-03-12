@@ -10,13 +10,15 @@
 
 namespace crash {
 
-template <class Key, class Value>
+template <class Key, class Value, int LoadFactor>
   requires Hashable<Key>
 class linear {
 
 public:
   using K = Key;
   using V = Value;
+  double LF = LoadFactor / 100.0;
+
   linear(size_t size_ = 16)
       : capacity(size_), keys(size_), values(size_), meta(2 * size_) {}
 
@@ -57,7 +59,7 @@ public:
     meta[2 * h + 1] = false;
     keys[h] = k;
     values[h] = v;
-    if (effective_size * 2 > capacity) {
+    if (effective_size >= capacity * LF) {
       linear replacement(2 * capacity);
       for (int i = 0; i < capacity; i++) {
         if (meta[2 * i]) {

@@ -18,10 +18,11 @@ concept Hashable = requires(const Key &k) {
   { k == k } -> std::convertible_to<bool>;
 };
 
-typedef struct {
+struct pcg32_random_t {
+  pcg32_random_t(uint64_t a, uint64_t b) : state(a), inc(b) {}
   uint64_t state;
   uint64_t inc;
-} pcg32_random_t;
+};
 
 static inline uint32_t pcg32_random_r(pcg32_random_t *rng) {
   uint64_t oldstate = rng->state;

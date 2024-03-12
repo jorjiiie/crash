@@ -16,12 +16,14 @@
 
 namespace crash {
 
-template <class Key, class Value>
+template <class Key, class Value, int LoadFactor>
   requires Hashable<Key>
 class quadratic {
 public:
   using K = Key;
   using V = Value;
+  double LF = LoadFactor / 100.0;
+
   quadratic(size_t size_ = 16)
       : capacity(size_), keys(size_), values(size_), meta(2 * size_) {}
 
@@ -71,7 +73,7 @@ public:
     keys[h] = k;
     values[h] = v;
 
-    if (effective_size * 2 > capacity) {
+    if (effective_size >= capacity * LF) {
       // resize
 
       quadratic replacement(2 * capacity);
@@ -104,13 +106,6 @@ public:
     keys.clear();
     values.clear();
     meta.clear();
-  }
-  size_t prefetch(const K &k) {
-    // fetch the key and the tombstone
-    size_t h = k.hash() & (capacity - 1);
-    keys[h]; // need to load these two, no idea how
-    meta[2 * h];
-    return h;
   }
   size_t size() const { return _size; }
   uint64_t memuse() const {
